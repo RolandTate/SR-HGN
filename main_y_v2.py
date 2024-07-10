@@ -53,8 +53,8 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='dblp')
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--dataset', type=str, default='imdb')
+    parser.add_argument('--epochs', type=int, default=120)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
     parser.add_argument('--val_split', type=float, default=0.1)
@@ -243,6 +243,8 @@ def main(params):
                 best_results = results
                 best_epoch = epoch
 
+                torch.save(model.state_dict(), osp.join(checkpoints_path, f'{my_str}.pkl'))
+
             logger.info(
                 'Epoch: {:d} | LR: {:.4f} | Loss {:.4f} | Val MiF1: {:.4f} (Best: {:.4f}) | Test MiF1: {:.4f} (Best: {:.4f})'.format(
                     epoch,
@@ -254,7 +256,7 @@ def main(params):
                     best_results['test_mif1']
                 ))
 
-            torch.save(model.state_dict(), osp.join(checkpoints_path, f'{my_str}_{epoch}.pkl'))
+            # torch.save(model.state_dict(), osp.join(checkpoints_path, f'{my_str}_{epoch}.pkl'))
 
         torch.cuda.empty_cache()
 
@@ -274,7 +276,8 @@ def main(params):
         ))
 
     if params['cluster']:
-        model.load_state_dict(torch.load(osp.join(checkpoints_path, f'{my_str}_{best_epoch}.pkl')))
+        # model.load_state_dict(torch.load(osp.join(checkpoints_path, f'{my_str}_{best_epoch}.pkl')))
+        model.load_state_dict(torch.load(osp.join(checkpoints_path, f'{my_str}.pkl')))
         cluster_results = cluster(model, G, target, labels)
 
         logger.info('NMI: {:.4f} | ARI: {:.4f}'.format(cluster_results['nmi'], cluster_results['ari']))

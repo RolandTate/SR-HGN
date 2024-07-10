@@ -28,10 +28,10 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='acm')
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--dataset', type=str, default='imdb')
+    parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--verbose', type=int, default=1)
-    parser.add_argument('--train_split', type=float, default=0.2)
+    parser.add_argument('--train_split', type=float, default=0.8)
     parser.add_argument('--val_split', type=float, default=0.1)
 
     parser.add_argument('--max_lr', type=float, default=1e-3)
@@ -87,7 +87,7 @@ def eval(model, G, labels, target, train_idx, val_idx, test_idx):
     model.eval()
 
     logits, _, _ = model(G, target)
-    loss = F.cross_entropy(logits[train_idx], labels[train_idx])
+    loss = F.cross_entropy(logits[val_idx], labels[val_idx])
     pred = logits.argmax(1).detach().cpu().numpy()
 
     train_macro_f1 = f1_score(labels[train_idx].cpu(), pred[train_idx], average='macro')
@@ -179,6 +179,8 @@ def main(params):
                 best_val_mif1 = results['val_mif1']
                 best_results = results
                 best_epoch = epoch
+
+                torch.save(model.state_dict(), osp.join(checkpoints_path, f'{my_str}.pkl'))
             
             logger.info('Epoch: {:d} | LR: {:.4f} | Loss {:.4f} | Val MiF1: {:.4f} (Best: {:.4f}) | Test MiF1: {:.4f} (Best: {:.4f})'.format(
                 epoch,
@@ -190,7 +192,7 @@ def main(params):
                 best_results['test_mif1']
             ))
 
-            torch.save(model.state_dict(), osp.join(checkpoints_path, f'{my_str}_{epoch}.pkl'))
+            # torch.save(model.state_dict(), osp.join(checkpoints_path, f'{my_str}_{epoch}.pkl'))
 
         torch.cuda.empty_cache()
 
@@ -209,7 +211,8 @@ def main(params):
     ))
 
     if params['cluster']:
-        model.load_state_dict(torch.load(osp.join(checkpoints_path, f'{my_str}_{best_epoch}.pkl')))
+        # model.load_state_dict(torch.load(osp.join(checkpoints_path, f'{my_str}_{best_epoch}.pkl')))
+        model.load_state_dict(torch.load(osp.join(checkpoints_path, f'{my_str}.pkl')))
         cluster_results = cluster(model, G, target, labels)
 
         logger.info('NMI: {:.4f} | ARI: {:.4f}'.format(cluster_results['nmi'], cluster_results['ari']))
@@ -221,7 +224,7 @@ def main(params):
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    plt.title('Training and Validation Loss')
+    plt.title(f'{my_str} Training and Validation Loss')
     # plt.savefig('loss_plot.png')
     plt.show()
 

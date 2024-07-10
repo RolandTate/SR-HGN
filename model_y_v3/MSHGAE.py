@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl
 from tqdm import tqdm
-from dgl.nn.pytorch import GATConv
+from dgl.nn.pytorch import GATConv, SAGEConv, GraphConv
 
 from model_y_v3.RelationGraphConv import RelationGraphConv, RelationAttentionConv
 from model_y_v3.HeteroConv import HeteroGraphConv
@@ -190,17 +190,6 @@ class MSHGEncoder(nn.Module):
         self.relation_layer = MSHGEncoderLayer(graph, input_dim, hidden_dim, relation_input_dim, relation_hidden_dim, n_heads,
                          dropout, negative_slope, residual, norm)
 
-        # transformer attention layers for relation fusing
-        self.query_linears = nn.ModuleDict({
-            ntype: nn.Linear(hidden_dim * n_heads, hidden_dim * n_heads) for ntype in graph.ntypes
-        })
-        self.key_linears = nn.ModuleDict({
-            etype: nn.Linear(hidden_dim * n_heads, hidden_dim * n_heads) for etype in graph.etypes
-        })
-        self.value_linears = nn.ModuleDict({
-            etype: nn.Linear(hidden_dim * n_heads, hidden_dim * n_heads) for etype in graph.etypes
-        })
-
         # transformation matrix for relation representation
         self.relation_transformation_weight = nn.ParameterDict({
             etype: nn.Parameter(torch.randn(n_heads, relation_hidden_dim, hidden_dim)) for etype in graph.etypes
@@ -220,7 +209,8 @@ class MSHGEncoder(nn.Module):
                                               num_heads=n_heads,
                                               dropout=dropout, negative_slope=negative_slope)
 
-        self.GAT_Layer = GATConv(in_feats=input_dim, out_feats=hidden_dim, num_heads=n_heads)
+        # self.GAT_Layer = GATConv(in_feats=input_dim, out_feats=hidden_dim, num_heads=n_heads)
+        self.GAT_Layer = GraphConv(in_feats=input_dim, out_feats=hidden_dim * n_heads)
 
         self.reset_parameters()
 
@@ -228,14 +218,6 @@ class MSHGEncoder(nn.Module):
         """Reinitialize learnable parameters."""
         gain = nn.init.calculate_gain('relu')
 
-        for etype in self.query_linears:
-            nn.init.xavier_normal_(self.query_linears[etype].weight, gain=gain)
-        for ntype in self.query_linears:
-            nn.init.xavier_normal_(self.query_linears[ntype].weight, gain=gain)
-        for etype in self.key_linears:
-            nn.init.xavier_normal_(self.key_linears[etype].weight, gain=gain)
-        for etype in self.value_linears:
-            nn.init.xavier_normal_(self.value_linears[etype].weight, gain=gain)
         for etype in self.relation_transformation_weight:
             nn.init.xavier_normal_(self.relation_transformation_weight[etype], gain=gain)
 
@@ -274,10 +256,6 @@ class MSHGEncoder(nn.Module):
             dst_node_features = [relation_target_node_features_dict[etype] for etype in etypes]
             raw_dst_node_features = [raw_target_node_features_dict[etype] for etype in etypes]
             dst_relation_embeddings = [relation_embedding[etype] for etype in etypes]
-            # q_linears = [self.query_linears[etype] for etype in etypes]
-            q_linear = self.query_linears[dsttype]
-            k_linears = [self.key_linears[etype] for etype in etypes]
-            v_linears = [self.value_linears[etype] for etype in etypes]
             dst_relation_embedding_transformation_weight = [self.relation_transformation_weight[etype] for etype in etypes]
             residual_weight = self.residual_weight[dsttype]
 
@@ -286,7 +264,6 @@ class MSHGEncoder(nn.Module):
             dst_node_relation_fusion_feature = self.relation_fusing(dst_node_features,
                                                                     raw_dst_node_features,
                                                                     dst_relation_embeddings,
-                                                                    q_linear, k_linears, v_linears,
                                                                     dst_relation_embedding_transformation_weight,
                                                                     residual_weight)
 
