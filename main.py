@@ -28,7 +28,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='imdb')
+    parser.add_argument('--dataset', type=str, default='acm')
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)

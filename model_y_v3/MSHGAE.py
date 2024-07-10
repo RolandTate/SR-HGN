@@ -5,6 +5,7 @@ import dgl
 from tqdm import tqdm
 from dgl.nn.pytorch import GATConv, SAGEConv, GraphConv
 
+from model_y_v3.MSHGDecoder import MSHGDecoder
 from model_y_v3.RelationGraphConv import RelationGraphConv, RelationAttentionConv
 from model_y_v3.HeteroConv import HeteroGraphConv
 from model_y_v3.RelationCrossing import RelationCrossing
@@ -129,22 +130,7 @@ class MSHGEncoderLayer(nn.Module):
         output_features_dict = {}
         # different relations crossing layer
         for srctype, etype, dsttype in output_features:
-            # (dsttype_node_relations_num, dst_nodes_num, n_heads * hidden_dim)
-            # dst_node_relations_features = torch.stack([output_features[(stype, reltype, dtype)]
-            #                                        for stype, reltype, dtype in output_features if dtype == dsttype], dim=0)
-            # output_features_dict[(srctype, etype, dsttype)] = self.relations_crossing_layer(dst_node_relations_features,
-            #                                                                                 self.relations_crossing_attention_weight[etype])
-
             output_features_dict[(srctype, etype, dsttype)] = output_features[(srctype, etype, dsttype)]
-
-            # alpha = F.sigmoid(self.residual_weight[dsttype])
-            # output_features_dict[((srctype, etype, dsttype))] = output_features_dict[(srctype, etype, dsttype)] * alpha + \
-            #     output_features[(srctype, etype, dsttype)] * (1 - alpha)
-
-        # layer norm for the output
-        # if self.norm:
-        #     for srctype, etype, dsttype in output_features_dict:
-        #         output_features_dict[(srctype, etype, dsttype)] = self.layer_norm[dsttype](output_features_dict[(srctype, etype, dsttype)])
 
         relation_embedding_dict = {}
         for etype in relation_embedding:
@@ -304,8 +290,8 @@ class MSHGAE(nn.Module):
             etype: nn.Parameter(torch.randn(relation_input_dim, 1)) for etype in graph.etypes
         })
 
-        self.layers = nn.ModuleList()
-        self.layers.append(
+        self.encoder = nn.ModuleList()
+        self.encoder.append(
             MSHGEncoder(graph=graph,
                   input_dim= hidden_dim * n_heads,
                   hidden_dim=hidden_dim, relation_input_dim=relation_input_dim,
@@ -313,13 +299,26 @@ class MSHGAE(nn.Module):
                   num_layers=1, n_heads=n_heads, dropout=dropout,
                   residual=residual))
         for _ in range(num_layers - 1):
-            self.layers.append(
+            self.encoder.append(
                 MSHGEncoder(graph=graph,
                   input_dim= hidden_dim * n_heads,
                   hidden_dim=hidden_dim, relation_input_dim=relation_hidden_dim * n_heads,
                   relation_hidden_dim=relation_hidden_dim,
                   num_layers=1, n_heads=n_heads, dropout=dropout,
                   residual=residual))
+
+        self.decoder = nn.ModuleList()
+        self.decoder.append(
+            MSHGDecoder(graph=graph,
+                        in_dim=hidden_dim * n_heads, out_dim=hidden_dim * n_heads,
+                        num_heads=n_heads, dropout=dropout))
+        for _ in range(num_layers - 1):
+            self.decoder.append(
+                MSHGDecoder(graph=graph,
+                            in_dim=hidden_dim * n_heads, out_dim=hidden_dim * n_heads,
+                            num_heads=n_heads, dropout=dropout))
+
+
 
     def reset_parameters(self):
         """Reinitialize learnable parameters."""
@@ -341,7 +340,10 @@ class MSHGAE(nn.Module):
             # each relation is associated with a specific type, if no semantic information is given,
             # then the one-hot representation of each relation is assign with trainable hidden representation
             relation_embedding = {etype: self.relation_embedding[etype].flatten() for etype in self.relation_embedding}
-            for layer in self.layers:
+            for layer in self.encoder:
                 h, relation_embedding = layer(graph, h, relation_embedding)
+
+            for layer in self.decoder:
+                h = layer(graph, h)
 
         return h, transformed_h
