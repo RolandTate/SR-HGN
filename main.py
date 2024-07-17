@@ -28,7 +28,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='acm')
+    parser.add_argument('--dataset', type=str, default='imdb')
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
@@ -38,10 +38,10 @@ def load_params():
     parser.add_argument('--clip', type=int, default=1.0)
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--input_dim', type=int, default=256)
-    parser.add_argument('--hidden_dim', type=int, default=64)
-    parser.add_argument('--num_node_heads', type=int, default=4)
-    parser.add_argument('--num_type_heads', type=int, default=4)
+    parser.add_argument('--input_dim', type=int, default=128)
+    parser.add_argument('--hidden_dim', type=int, default=16)
+    parser.add_argument('--num_node_heads', type=int, default=2)
+    parser.add_argument('--num_type_heads', type=int, default=2)
     parser.add_argument('--alpha', type=float, default=0.5)
 
     parser.add_argument('--cluster', action='store_false')

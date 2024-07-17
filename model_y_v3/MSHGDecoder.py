@@ -99,7 +99,7 @@ class MSHGDecoder(nn.Module):
             ) for stype, etype, dtype in etypes
         }, 'mean')
 
-        self.a_linear = nn.ModuleDict({ntype: nn.Linear(out_dim, out_dim) for ntype in ntypes})
+        # self.a_linear = nn.ModuleDict({ntype: nn.Linear(out_dim, out_dim) for ntype in ntypes})
         self.skip = nn.ParameterDict({ntype: nn.Parameter(torch.ones(1)) for ntype in ntypes})
         self.drop = nn.Dropout(dropout)
 
@@ -132,7 +132,8 @@ class MSHGDecoder(nn.Module):
                 if g.num_dst_nodes(ntype) == 0:
                     continue
                 alpha = torch.sigmoid(self.skip[ntype])
-                trans_out = self.drop(self.a_linear[ntype](hs[ntype]))
+                # trans_out = self.drop(self.a_linear[ntype](hs[ntype]))
+                trans_out = self.drop(hs[ntype])
                 out = alpha * trans_out + (1 - alpha) * feats_dst[ntype]
                 out_feats[ntype] = self.norms[ntype](out) if self.use_norm else out
             return out_feats

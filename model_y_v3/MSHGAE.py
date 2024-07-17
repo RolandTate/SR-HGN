@@ -198,6 +198,9 @@ class MSHGEncoder(nn.Module):
         # self.GAT_Layer = GATConv(in_feats=input_dim, out_feats=hidden_dim, num_heads=n_heads)
         self.GAT_Layer = GraphConv(in_feats=input_dim, out_feats=hidden_dim * n_heads)
 
+        self.drop = nn.Dropout(dropout)
+
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -215,13 +218,19 @@ class MSHGEncoder(nn.Module):
         :param relation_embedding: embedding for each relation, dict, {etype: feature} or None
         :return:
         """
+        h = {ntype: graph.nodes[ntype].data['x'] for ntype in graph.ntypes}
+        # if graph.is_block:
+        #     feats_dst = {ntype: h[ntype][:graph.num_dst_nodes(ntype)] for ntype in h}
+        # else:
+        #     feats_dst = h
+
         # node level convolution
         g = graph.local_var()
         g = dgl.to_homogeneous(g, ndata=['x'])
         node_level_features = F.relu(self.GAT_Layer(g, g.ndata['x']).view(-1, self.hidden_dim * self.n_heads))
 
         # relation convolution
-        h = {ntype: graph.nodes[ntype].data['x'] for ntype in graph.ntypes}
+
         relation_target_node_features, relation_embedding, dst_nodes_after_transformation = self.relation_layer(graph, h,
                                                                       relation_embedding)
 
@@ -256,7 +265,16 @@ class MSHGEncoder(nn.Module):
             e_id = e_id + graph.num_nodes(dsttype)
             alpha = F.sigmoid(self.scale_weight[dsttype])
             relation_fusion_embedding_dict[dsttype] = dst_node_relation_fusion_feature * alpha + node_level_features[s_id: e_id] * (1 - alpha)
+
+            # beta = F.sigmoid(self.residual_weight[dsttype])
+            # trans_out = self.drop( relation_fusion_embedding_dict[dsttype])
+            # # out = beta * trans_out + (1 - beta) * feats_dst[dsttype]
+            # out = trans_out + feats_dst[dsttype]
+            # # relation_fusion_embedding_dict[dsttype] = self.norms[dsttype](out)
+            # relation_fusion_embedding_dict[dsttype] = out
+
             s_id = s_id + graph.num_nodes(dsttype)
+            # 用于节点级编码
             graph.nodes[dsttype].data.update({'x': relation_fusion_embedding_dict[dsttype]})
 
         # relation_fusion_embedding_dict, {ntype: tensor -> (nodes, n_heads * hidden_dim)}
