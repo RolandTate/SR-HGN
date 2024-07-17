@@ -42,25 +42,25 @@ class RelationFusing(nn.Module):
             # 将 dst_node_features 和 raw_dst_node_features 进行平均值聚合
             raw_dst_node_features_avg = torch.stack(raw_dst_node_features, dim=0).mean(dim=0)
 
-            # (num_dst_relations, n_heads, relation_hidden_dim)
-            dst_relation_embeddings = torch.stack(dst_relation_embeddings, dim=0).reshape(len(dst_node_features),
-                                                                                          self.num_heads,
-                                                                                          self.relation_hidden_dim)
-            # (num_dst_relations, n_heads, relation_hidden_dim, relation_hidden_dim)
-            dst_relation_embedding_transformation_weight = torch.stack(dst_relation_embedding_transformation_weight,
-                                                                       dim=0).reshape(len(dst_node_features),
-                                                                                      self.num_heads,
-                                                                                      self.relation_hidden_dim,
-                                                                                      self.node_hidden_dim)
-            # shape (num_dst_relations, n_heads, hidden_dim)
-            dst_relation_embeddings = torch.einsum('abc,abcd->abd', dst_relation_embeddings,
-                                                   dst_relation_embedding_transformation_weight)
+            # # (num_dst_relations, n_heads, relation_hidden_dim)
+            # dst_relation_embeddings = torch.stack(dst_relation_embeddings, dim=0).reshape(len(dst_node_features),
+            #                                                                               self.num_heads,
+            #                                                                               self.relation_hidden_dim)
+            # # (num_dst_relations, n_heads, relation_hidden_dim, relation_hidden_dim)
+            # dst_relation_embedding_transformation_weight = torch.stack(dst_relation_embedding_transformation_weight,
+            #                                                            dim=0).reshape(len(dst_node_features),
+            #                                                                           self.num_heads,
+            #                                                                           self.relation_hidden_dim,
+            #                                                                           self.node_hidden_dim)
+            # # shape (num_dst_relations, n_heads, hidden_dim)
+            # dst_relation_embeddings = torch.einsum('abc,abcd->abd', dst_relation_embeddings,
+            #                                        dst_relation_embedding_transformation_weight)
 
             # 将 dst_node_features 和对应的 dst_relation_embeddings 相乘
             dst_node_features_transformed = []
             for i in range(len(dst_node_features)):
                 transformed_feature = dst_node_features[i].reshape(-1, self.num_heads, self.node_hidden_dim)
-                transformed_feature = transformed_feature * dst_relation_embeddings[i].unsqueeze(0)
+                # transformed_feature = transformed_feature * dst_relation_embeddings[i].unsqueeze(0)
                 dst_node_features_transformed.append(transformed_feature)
 
             # 平均值聚合
@@ -69,8 +69,8 @@ class RelationFusing(nn.Module):
 
             dst_node_relation_fusion_feature = self.dropout(dst_node_features_avg)
 
-            alpha = torch.sigmoid(residual_weight)
-            dst_node_relation_fusion_feature = dst_node_relation_fusion_feature * alpha + raw_dst_node_features_avg * (
-                        1 - alpha)
+            # alpha = torch.sigmoid(residual_weight)
+            # dst_node_relation_fusion_feature = dst_node_relation_fusion_feature * alpha + raw_dst_node_features_avg * (
+            #             1 - alpha)
 
         return dst_node_relation_fusion_feature
