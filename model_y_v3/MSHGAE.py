@@ -122,7 +122,7 @@ class MSHGEncoderLayer(nn.Module):
         :return: output_features: dict, {relation_type: target_node_features}
         """
         # output_features, dict {(srctype, etypye, dsttype): target_node_features}
-        h = {ntype: self.node_transformation_layers[ntype](h[ntype]) for ntype in graph.ntypes}
+        # h = {ntype: self.node_transformation_layers[ntype](h[ntype]) for ntype in graph.ntypes}
         output_features, dst_nodes_after_transformation = self.hetero_conv(graph, h, relation_embedding,
                                            self.relation_src_node_transformation_layers,
                                            self.relation_transformation_weight)
@@ -172,6 +172,11 @@ class MSHGEncoder(nn.Module):
         self.residual = residual
         self.norm = norm
 
+        self.node_transformation_layers = nn.ModuleDict({
+            ntype: nn.Linear(input_dim, hidden_dim * n_heads)
+            for ntype in graph.ntypes
+        })
+
         # each layer takes in the heterogeneous graph as input
         self.relation_layer = MSHGEncoderLayer(graph, input_dim, hidden_dim, relation_input_dim, relation_hidden_dim, n_heads,
                          dropout, negative_slope, residual, norm)
@@ -198,6 +203,8 @@ class MSHGEncoder(nn.Module):
         # self.GAT_Layer = GATConv(in_feats=input_dim, out_feats=hidden_dim, num_heads=n_heads)
         self.GAT_Layer = GraphConv(in_feats=input_dim, out_feats=hidden_dim * n_heads)
 
+        self.norms = nn.ModuleDict({ntype: nn.LayerNorm(hidden_dim * n_heads) for ntype in graph.ntypes})
+
         self.drop = nn.Dropout(dropout)
 
 
@@ -219,10 +226,15 @@ class MSHGEncoder(nn.Module):
         :return:
         """
         h = {ntype: graph.nodes[ntype].data['x'] for ntype in graph.ntypes}
-        # if graph.is_block:
-        #     feats_dst = {ntype: h[ntype][:graph.num_dst_nodes(ntype)] for ntype in h}
-        # else:
-        #     feats_dst = h
+        if graph.is_block:
+            feats_dst = {ntype: h[ntype][:graph.num_dst_nodes(ntype)] for ntype in h}
+        else:
+            feats_dst = h
+
+        for ntype in graph.ntypes:
+            graph.nodes[ntype].data.update({'x': self.node_transformation_layers[ntype](h[ntype])})
+
+        h = {ntype: graph.nodes[ntype].data['x'] for ntype in graph.ntypes}
 
         # node level convolution
         g = graph.local_var()
@@ -266,12 +278,13 @@ class MSHGEncoder(nn.Module):
             alpha = F.sigmoid(self.scale_weight[dsttype])
             relation_fusion_embedding_dict[dsttype] = dst_node_relation_fusion_feature * alpha + node_level_features[s_id: e_id] * (1 - alpha)
 
-            # beta = F.sigmoid(self.residual_weight[dsttype])
-            # trans_out = self.drop( relation_fusion_embedding_dict[dsttype])
-            # # out = beta * trans_out + (1 - beta) * feats_dst[dsttype]
+            beta = F.sigmoid(self.residual_weight[dsttype])
+            trans_out = self.drop(relation_fusion_embedding_dict[dsttype])
+            # trans_out = relation_fusion_embedding_dict[dsttype]
+            out = beta * trans_out + (1 - beta) * feats_dst[dsttype]
             # out = trans_out + feats_dst[dsttype]
-            # # relation_fusion_embedding_dict[dsttype] = self.norms[dsttype](out)
-            # relation_fusion_embedding_dict[dsttype] = out
+            # relation_fusion_embedding_dict[dsttype] = self.norms[dsttype](out)
+            relation_fusion_embedding_dict[dsttype] = out
 
             s_id = s_id + graph.num_nodes(dsttype)
             # 用于节点级编码
