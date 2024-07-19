@@ -268,11 +268,13 @@ class MSHGEncoder(nn.Module):
 
 
             # Tensor, shape (heads_num * hidden_dim)
-            dst_node_relation_fusion_feature = self.relation_fusing(dst_node_features,
-                                                                    raw_dst_node_features,
-                                                                    dst_relation_embeddings,
-                                                                    dst_relation_embedding_transformation_weight,
-                                                                    residual_weight)
+            # dst_node_relation_fusion_feature = self.relation_fusing(dst_node_features,
+            #                                                         raw_dst_node_features,
+            #                                                         dst_relation_embeddings,
+            #                                                         dst_relation_embedding_transformation_weight,
+            #                                                         residual_weight)
+
+            dst_node_relation_fusion_feature = relation_target_node_features
 
             e_id = e_id + graph.num_nodes(dsttype)
             alpha = F.sigmoid(self.scale_weight[dsttype])
@@ -364,6 +366,7 @@ class MSHGAE(nn.Module):
         with graph.local_scope():
             # initial projection
             h = {ntype: F.gelu(self.projection_layer[ntype](graph.nodes[ntype].data['x'])) for ntype in graph.ntypes}
+            # h = {ntype: self.projection_layer[ntype](graph.nodes[ntype].data['x']) for ntype in graph.ntypes}
             transformed_h = h
             for ntype in graph.ntypes:
                 graph.nodes[ntype].data.update({'x': h[ntype]})

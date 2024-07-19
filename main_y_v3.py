@@ -54,7 +54,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='dblp')  # acm, dblp, imdb
+    parser.add_argument('--dataset', type=str, default='imdb')  # acm, dblp, imdb
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
@@ -65,9 +65,9 @@ def load_params():
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--num_layers', type=int, default=2)
     parser.add_argument('--input_dim', type=int, default=128)
-    parser.add_argument('--hidden_dim', type=int, default=16)
-    parser.add_argument('--relation_hidden_dim', type=int, default=8)
-    parser.add_argument('--num_heads', type=int, default=3)
+    parser.add_argument('--hidden_dim', type=int, default=8)
+    parser.add_argument('--relation_hidden_dim', type=int, default=4)
+    parser.add_argument('--num_heads', type=int, default=2)
     parser.add_argument('--dropout', type=float, default=0.3)
     parser.add_argument('--residual', type=bool, default=True)
     parser.add_argument('--alpha', type=float, default=0.1)

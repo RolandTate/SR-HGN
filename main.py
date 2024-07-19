@@ -39,7 +39,7 @@ def load_params():
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--num_layers', type=int, default=3)
     parser.add_argument('--input_dim', type=int, default=128)
-    parser.add_argument('--hidden_dim', type=int, default=16)
+    parser.add_argument('--hidden_dim', type=int, default=8)
     parser.add_argument('--num_node_heads', type=int, default=2)
     parser.add_argument('--num_type_heads', type=int, default=2)
     parser.add_argument('--alpha', type=float, default=0.5)
