@@ -47,7 +47,7 @@ class MSHGEncoderLayer(nn.Module):
 
         # srcnode in relation transformation layers of each type
         self.relation_src_node_transformation_layers = nn.ModuleDict({
-            etype: nn.Linear(input_dim, hidden_dim * n_heads)
+            etype: nn.Linear(input_dim, hidden_dim * n_heads, bias=False)
             for etype in graph.etypes
         })
 
@@ -98,14 +98,8 @@ class MSHGEncoderLayer(nn.Module):
     def reset_parameters(self):
         """Reinitialize learnable parameters."""
         gain = nn.init.calculate_gain('relu')
-        for ntype in self.node_transformation_layers:
-            nn.init.xavier_normal_(self.node_transformation_layers[ntype].weight, gain=gain)
-        for etype in self.relation_src_node_transformation_layers:
-            nn.init.xavier_normal_(self.relation_src_node_transformation_layers[etype].weight, gain=gain)
         for weight in self.relation_transformation_weight:
             nn.init.xavier_normal_(self.relation_transformation_weight[weight], gain=gain)
-        for etype in self.relation_propagation_layer:
-            nn.init.xavier_normal_(self.relation_propagation_layer[etype].weight, gain=gain)
         if self.residual:
             for ntype in self.res_fc:
                 nn.init.xavier_normal_(self.res_fc[ntype].weight, gain=gain)
@@ -173,7 +167,7 @@ class MSHGEncoder(nn.Module):
         self.norm = norm
 
         self.node_transformation_layers = nn.ModuleDict({
-            ntype: nn.Linear(input_dim, hidden_dim * n_heads)
+            ntype: nn.Linear(input_dim, hidden_dim * n_heads, bias=False)
             for ntype in graph.ntypes
         })
 
@@ -201,7 +195,9 @@ class MSHGEncoder(nn.Module):
                                               dropout=dropout, negative_slope=negative_slope)
 
         # self.GAT_Layer = GATConv(in_feats=input_dim, out_feats=hidden_dim, num_heads=n_heads)
-        self.GAT_Layer = GraphConv(in_feats=input_dim, out_feats=hidden_dim * n_heads)
+        self.GConv_Layer = GraphConv(in_feats=input_dim, out_feats=hidden_dim * n_heads, bias=False)
+
+        self.feature_fusion_layers = nn.ModuleDict({ntype: nn.Linear(hidden_dim * n_heads * 2, hidden_dim * n_heads) for ntype in graph.ntypes})
 
         self.norms = nn.ModuleDict({ntype: nn.LayerNorm(hidden_dim * n_heads) for ntype in graph.ntypes})
 
@@ -239,7 +235,7 @@ class MSHGEncoder(nn.Module):
         # node level convolution
         g = graph.local_var()
         g = dgl.to_homogeneous(g, ndata=['x'])
-        node_level_features = F.relu(self.GAT_Layer(g, g.ndata['x']).view(-1, self.hidden_dim * self.n_heads))
+        node_level_features = F.relu(self.GConv_Layer(g, g.ndata['x']).view(-1, self.hidden_dim * self.n_heads))
 
         # relation convolution
 
@@ -277,7 +273,9 @@ class MSHGEncoder(nn.Module):
 
             e_id = e_id + graph.num_nodes(dsttype)
             alpha = F.sigmoid(self.scale_weight[dsttype])
-            relation_fusion_embedding_dict[dsttype] = dst_node_relation_fusion_feature * alpha + node_level_features[s_id: e_id] * (1 - alpha)
+            # relation_fusion_embedding_dict[dsttype] = dst_node_relation_fusion_feature * alpha + node_level_features[s_id: e_id] * (1 - alpha)
+            relation_fusion_embedding_dict[dsttype] = torch.cat([dst_node_relation_fusion_feature, node_level_features[s_id: e_id]], dim=-1)
+            relation_fusion_embedding_dict[dsttype] = self.feature_fusion_layers[dsttype](relation_fusion_embedding_dict[dsttype])
 
             beta = F.sigmoid(self.residual_weight[dsttype])
             trans_out = self.drop(relation_fusion_embedding_dict[dsttype])

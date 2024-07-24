@@ -52,8 +52,8 @@ class DeCoderAttention(nn.Module):
             q = self.q_linear(feat_dst).view(-1, self.num_heads, self.d_k)
 
             # k[:, h] @= w_att[h] => k[n, h, j] = ∑(i) k[n, h, i] * w_att[h, i, j]
-            k = torch.einsum('nhi,hij->nhj', k, self.w_att)
-            v = torch.einsum('nhi,hij->nhj', v, self.w_msg)
+            # k = torch.einsum('nhi,hij->nhj', k, self.w_att)
+            # v = torch.einsum('nhi,hij->nhj', v, self.w_msg)
 
             g.srcdata.update({'k': k, 'v': v})
             g.dstdata['q'] = q
@@ -85,9 +85,9 @@ class MSHGDecoder(nn.Module):
         etypes = graph.canonical_etypes
 
         d_k = out_dim // num_heads
-        k_linear = {ntype: nn.Linear(in_dim, out_dim) for ntype in ntypes}
-        q_linear = {ntype: nn.Linear(in_dim, out_dim) for ntype in ntypes}
-        v_linear = {ntype: nn.Linear(in_dim, out_dim) for ntype in ntypes}
+        k_linear = {ntype: nn.Linear(in_dim, out_dim, bias=False) for ntype in ntypes}
+        q_linear = {ntype: nn.Linear(in_dim, out_dim, bias=False) for ntype in ntypes}
+        v_linear = {ntype: nn.Linear(in_dim, out_dim, bias=False) for ntype in ntypes}
         w_att = {r[1]: nn.Parameter(torch.Tensor(num_heads, d_k, d_k)) for r in etypes}
         w_msg = {r[1]: nn.Parameter(torch.Tensor(num_heads, d_k, d_k)) for r in etypes}
         mu = {r[1]: nn.Parameter(torch.ones(num_heads)) for r in etypes}

@@ -28,7 +28,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='imdb')
+    parser.add_argument('--dataset', type=str, default='dblp')
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
@@ -38,11 +38,11 @@ def load_params():
     parser.add_argument('--clip', type=int, default=1.0)
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--num_layers', type=int, default=3)
-    parser.add_argument('--input_dim', type=int, default=128)
-    parser.add_argument('--hidden_dim', type=int, default=8)
-    parser.add_argument('--num_node_heads', type=int, default=2)
-    parser.add_argument('--num_type_heads', type=int, default=2)
-    parser.add_argument('--alpha', type=float, default=0.5)
+    parser.add_argument('--input_dim', type=int, default=256)
+    parser.add_argument('--hidden_dim', type=int, default=256)
+    parser.add_argument('--num_node_heads', type=int, default=4)
+    parser.add_argument('--num_type_heads', type=int, default=4)
+    parser.add_argument('--alpha', type=float, default=0.1)
 
     parser.add_argument('--cluster', action='store_false')
 
@@ -162,6 +162,9 @@ def main(params):
     train_losses = []
     val_losses = []
 
+    train_micro_values = []
+    val_micro_values = []
+
     # Start measuring training time
     start_time = time.time()
 
@@ -174,6 +177,9 @@ def main(params):
             results = eval(model, G, labels, target, train_idx, val_idx, test_idx)
 
             val_losses.append(results['loss'])
+
+            train_micro_values.append(results['train_mif1'])
+            val_micro_values.append(results['val_maf1'])
 
             if results['val_mif1'] > best_val_mif1:
                 best_val_mif1 = results['val_mif1']
@@ -218,14 +224,39 @@ def main(params):
         logger.info('NMI: {:.4f} | ARI: {:.4f}'.format(cluster_results['nmi'], cluster_results['ari']))
 
     # Plot training and validation loss
-    plt.figure()
-    plt.plot(train_losses, label='Training Loss')
-    plt.plot(val_losses, label='Validation Loss')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.title(f'{my_str} Training and Validation Loss')
-    # plt.savefig('loss_plot.png')
+    # plt.figure()
+    # plt.plot(train_losses, label='Training Loss')
+    # plt.plot(val_losses, label='Validation Loss')
+    # plt.xlabel('Epochs')
+    # plt.ylabel('Loss')
+    # plt.legend()
+    # plt.title(f'{my_str} Training and Validation Loss')
+    # # plt.savefig('loss_plot.png')
+    # plt.show()
+
+    fig, ax1 = plt.subplots()
+
+    ax1.set_xlabel('Epochs')
+    ax1.set_ylabel('Loss Values', color='tab:blue')
+    loss_line, = ax1.plot(range(params['epochs']), train_losses, color='tab:blue', label='Loss values')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    ax2.set_ylabel('Classification Micro-F1', color='tab:red')  # we already handled the x-label with ax1
+    ax2.set_ylim(0, 1.05)
+    micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='tab:green', label='Training Micro-F1')
+    macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='tab:red', label='Validating Macro-F1')
+    ax2.tick_params(axis='y', labelcolor='tab:red')
+
+    # fig.tight_layout(pad=3.0)  # otherwise the right y-label is slightly clipped
+    # plt.title('Training Loss and Metrics')
+
+    # Collect handles and labels from both axes
+    lines = [loss_line, micro_line, macro_line]
+    labels = [line.get_label() for line in lines]
+
+    # Create the legend manually
+    ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=3)
     plt.show()
 
     # Print model parameters
