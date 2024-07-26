@@ -54,7 +54,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='dblp')  # acm, dblp, imdb
+    parser.add_argument('--dataset', type=str, default='imdb')  # acm, dblp, imdb
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
@@ -65,12 +65,12 @@ def load_params():
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--num_layers', type=int, default=2)
     parser.add_argument('--input_dim', type=int, default=128)
-    parser.add_argument('--hidden_dim', type=int, default=16)
-    parser.add_argument('--relation_hidden_dim', type=int, default=16)
-    parser.add_argument('--num_heads', type=int, default=4)
+    parser.add_argument('--hidden_dim', type=int, default=8)
+    parser.add_argument('--relation_hidden_dim', type=int, default=8)
+    parser.add_argument('--num_heads', type=int, default=2)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--residual', type=bool, default=True)
-    parser.add_argument('--alpha', type=float, default=0.1)
+    parser.add_argument('--alpha', type=float, default=0.5)
 
     parser.add_argument('--cluster', action='store_false')
 
@@ -95,7 +95,7 @@ def init_feat(G, n_inp, features):
     return G, input_dims
 
 
-def train(model, G, labels, target, optimizer, scheduler, train_idx, clip=1.0):
+def train(model, G, labels, target, optimizer, scheduler, train_idx, clip=1.0, alpha=1.0):
     model.train()
 
     # input_features = {(stype, etype, dtype): G.srcnodes[dtype].data['x'] for stype, etype, dtype in
@@ -108,7 +108,7 @@ def train(model, G, labels, target, optimizer, scheduler, train_idx, clip=1.0):
     # raw = {ntype: G.nodes[ntype].data['x'] for ntype in G.ntypes}
     loss_reconstruction = F.mse_loss(nodes_representation[target][train_idx], raw[target][train_idx])
     loss_classification = F.cross_entropy(logits[train_idx], labels[train_idx])
-    loss = loss_reconstruction + loss_classification
+    loss = alpha * loss_reconstruction + loss_classification
 
     # loss = F.cross_entropy(logits[train_idx], labels[train_idx])
 
@@ -121,7 +121,7 @@ def train(model, G, labels, target, optimizer, scheduler, train_idx, clip=1.0):
     return loss.item()
 
 
-def eval(model, G, labels, target, train_idx, val_idx, test_idx):
+def eval(model, G, labels, target, train_idx, val_idx, test_idx, alpha):
     model.eval()
 
     # input_features = {(stype, etype, dtype): G.srcnodes[dtype].data['x'] for stype, etype, dtype in
@@ -134,7 +134,7 @@ def eval(model, G, labels, target, train_idx, val_idx, test_idx):
     torch.cat(list(nodes_representation.values()), dim=0)
     loss_reconstruction = F.mse_loss(nodes_representation[target][val_idx], raw[target][val_idx])
     loss_classification = F.cross_entropy(logits[val_idx], labels[val_idx])
-    loss = loss_reconstruction + loss_classification
+    loss = alpha * loss_reconstruction + loss_classification
 
     # loss = F.cross_entropy(logits[val_idx], labels[val_idx])
 
@@ -250,12 +250,12 @@ def main(params):
     start_time = time.time()
 
     for epoch in range(1, params['epochs'] + 1):
-        loss = train(model, G, labels, target, optimizer, scheduler, train_idx, clip=params['clip'])
+        loss = train(model, G, labels, target, optimizer, scheduler, train_idx, clip=params['clip'], alpha=params['alpha'])
 
         train_losses.append(loss)
 
 
-        results = eval(model, G, labels, target, train_idx, val_idx, test_idx)
+        results = eval(model, G, labels, target, train_idx, val_idx, test_idx, params['alpha'])
 
         val_losses.append(results['loss'])
 

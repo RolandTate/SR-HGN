@@ -52,7 +52,7 @@ class DeCoderAttention(nn.Module):
             q = self.q_linear(feat_dst).view(-1, self.num_heads, self.d_k)
 
             # k[:, h] @= w_att[h] => k[n, h, j] = ∑(i) k[n, h, i] * w_att[h, i, j]
-            # k = torch.einsum('nhi,hij->nhj', k, self.w_att)
+            k = torch.einsum('nhi,hij->nhj', k, self.w_att)
             # v = torch.einsum('nhi,hij->nhj', v, self.w_msg)
 
             g.srcdata.update({'k': k, 'v': v})
