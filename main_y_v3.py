@@ -54,7 +54,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='imdb')  # acm, dblp, imdb
+    parser.add_argument('--dataset', type=str, default='acm')  # acm, dblp, imdb
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
@@ -63,14 +63,14 @@ def load_params():
     parser.add_argument('--max_lr', type=float, default=1e-3)
     parser.add_argument('--clip', type=int, default=1.0)
     parser.add_argument('--weight_decay', type=float, default=1e-5)
-    parser.add_argument('--num_layers', type=int, default=2)
+    parser.add_argument('--num_layers', type=int, default=5)
     parser.add_argument('--input_dim', type=int, default=128)
-    parser.add_argument('--hidden_dim', type=int, default=8)
-    parser.add_argument('--relation_hidden_dim', type=int, default=8)
-    parser.add_argument('--num_heads', type=int, default=2)
+    parser.add_argument('--hidden_dim', type=int, default=16)
+    parser.add_argument('--relation_hidden_dim', type=int, default=16)
+    parser.add_argument('--num_heads', type=int, default=4)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--residual', type=bool, default=True)
-    parser.add_argument('--alpha', type=float, default=0.5)
+    parser.add_argument('--alpha', type=float, default=0.1)
 
     parser.add_argument('--cluster', action='store_false')
 
@@ -307,42 +307,31 @@ def main(params):
 
         logger.info('NMI: {:.4f} | ARI: {:.4f}'.format(cluster_results['nmi'], cluster_results['ari']))
 
-    # # Plot training and validation loss
-    # plt.figure()
-    # plt.plot(train_losses, label='Training Loss')
-    # plt.plot(val_losses, label='Validation Loss')
-    # plt.xlabel('Epochs')
-    # plt.ylabel('Loss')
-    # plt.legend()
-    # plt.title(f'{my_str} Training and Validation Loss')
-    # # plt.savefig('loss_plot.png')
+    # fig, ax1 = plt.subplots()
+    #
+    # ax1.set_xlabel('Epochs')
+    # ax1.set_ylabel('Loss Values', color='tab:blue')
+    # train_loss_line, = ax1.plot(range(params['epochs']), train_losses, color='tab:blue', label='train_loss values')
+    # val_loss_line, = ax1.plot(range(params['epochs']), val_losses, color='tab:orange', label='val_loss values')
+    # ax1.tick_params(axis='y', labelcolor='tab:blue')
+    #
+    # ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    # ax2.set_ylabel('Classification Micro-F1', color='tab:red')  # we already handled the x-label with ax1
+    # ax2.set_ylim(0, 1.05)
+    # micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='tab:green', label='Training Micro-F1')
+    # macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='tab:red', label='Validating Macro-F1')
+    # ax2.tick_params(axis='y', labelcolor='tab:red')
+    #
+    # # fig.tight_layout(pad=3.0)  # otherwise the right y-label is slightly clipped
+    # # plt.title('Training Loss and Metrics')
+    #
+    # # Collect handles and labels from both axes
+    # lines = [train_loss_line, val_loss_line, micro_line, macro_line]
+    # labels = [line.get_label() for line in lines]
+    #
+    # # Create the legend manually
+    # ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2)
     # plt.show()
-
-    fig, ax1 = plt.subplots()
-
-    ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Loss Values', color='tab:blue')
-    train_loss_line, = ax1.plot(range(params['epochs']), train_losses, color='tab:blue', label='train_loss values')
-    val_loss_line, = ax1.plot(range(params['epochs']), val_losses, color='tab:orange', label='val_loss values')
-    ax1.tick_params(axis='y', labelcolor='tab:blue')
-
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    ax2.set_ylabel('Classification Micro-F1', color='tab:red')  # we already handled the x-label with ax1
-    ax2.set_ylim(0, 1.05)
-    micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='tab:green', label='Training Micro-F1')
-    macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='tab:red', label='Validating Macro-F1')
-    ax2.tick_params(axis='y', labelcolor='tab:red')
-
-    # fig.tight_layout(pad=3.0)  # otherwise the right y-label is slightly clipped
-    # plt.title('Training Loss and Metrics')
-
-    # Collect handles and labels from both axes
-    lines = [train_loss_line, val_loss_line, micro_line, macro_line]
-    labels = [line.get_label() for line in lines]
-
-    # Create the legend manually
-    ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2)
-    plt.show()
 
     # Print model parameters
     model_params = get_n_params(model)
@@ -354,9 +343,52 @@ def main(params):
 
     print(f'Training Time: {training_time:.2f} seconds')
 
+    return best_results, cluster_results
+
 
 if __name__ == '__main__':
     warnings.filterwarnings('ignore')
     params = load_params()
     set_random_seed(params['seed'])
-    main(params)
+    # main(params)
+
+    micro_f1_scores = []
+    macro_f1_scores = []
+    nmi_scores = []
+    ari_scores = []
+    num_runs = 10
+
+    for i in range(num_runs):
+        print(f"Run {i + 1}/{num_runs}")
+        results, cluster_results = main(params)
+        micro_f1_scores.append(results['test_mif1'])
+        macro_f1_scores.append(results['test_maf1'])
+        nmi_scores.append(cluster_results['nmi'])
+        ari_scores.append(cluster_results['ari'])
+
+    avg_micro_f1 = np.mean(micro_f1_scores)
+    std_micro_f1 = np.std(micro_f1_scores)
+    avg_macro_f1 = np.mean(macro_f1_scores)
+    std_macro_f1 = np.std(macro_f1_scores)
+    avg_nmi = np.mean(nmi_scores)
+    std_nmi = np.std(nmi_scores)
+    avg_ari = np.mean(ari_scores)
+    std_ari = np.std(ari_scores)
+
+    # 输出10次运行的详细值在一行
+    micro_f1_scores_str = ', '.join([f"{score * 100:.2f}" for score in micro_f1_scores])
+    print(f"Micro-F1 Scores for each run: [{micro_f1_scores_str}]")
+    print(f"Average Best Micro-F1 Score over {num_runs} runs: {avg_micro_f1 * 100:.2f} ({std_micro_f1 * 100:.2f})")
+
+    macro_f1_scores_str = ', '.join([f"{score * 100:.2f}" for score in macro_f1_scores])
+    print(f"Macro-F1 Scores for each run: [{macro_f1_scores_str}]")
+    print(f"Average Best Macro-F1 Score over {num_runs} runs: {avg_macro_f1 * 100:.2f} ({std_macro_f1 * 100:.2f})")
+
+    nmi_scores_str = ', '.join([f"{score * 100:.2f}" for score in nmi_scores])
+    print(f"NMI Scores for each run: [{nmi_scores_str}]")
+    print(f"Average NMI Score over {num_runs} runs: {avg_nmi * 100:.2f} ({std_nmi * 100:.2f})")
+
+    ari_scores_str = ', '.join([f"{score * 100:.2f}" for score in ari_scores])
+    print(f"ARI Scores for each run: [{ari_scores_str}]")
+    print(f"Average ARI Score over {num_runs} runs: {avg_ari * 100:.2f} ({std_ari * 100:.2f})")
+

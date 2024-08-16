@@ -286,7 +286,7 @@ class MSHGEncoder(nn.Module):
             relation_fusion_embedding_dict[dsttype] = out
 
             s_id = s_id + graph.num_nodes(dsttype)
-            # 用于节点级编码
+            # 用于节点级编码y
             graph.nodes[dsttype].data.update({'x': relation_fusion_embedding_dict[dsttype]})
 
         # relation_fusion_embedding_dict, {ntype: tensor -> (nodes, n_heads * hidden_dim)}
