@@ -22,6 +22,7 @@ from model_y_v3.R_HGT import CR_HGN
 from model_y import R_HGT
 from model_y_v3.Classifier import Classifier
 from utils import set_random_seed, load_data, get_n_params, set_logger
+from torchinfo import summary
 
 # 设置matplotlib的日志级别
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -54,7 +55,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='acm')  # acm, dblp, imdb
+    parser.add_argument('--dataset', type=str, default='dblp')  # acm, dblp, imdb
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
@@ -63,7 +64,7 @@ def load_params():
     parser.add_argument('--max_lr', type=float, default=1e-3)
     parser.add_argument('--clip', type=int, default=1.0)
     parser.add_argument('--weight_decay', type=float, default=1e-5)
-    parser.add_argument('--num_layers', type=int, default=5)
+    parser.add_argument('--num_layers', type=int, default=3)
     parser.add_argument('--input_dim', type=int, default=128)
     parser.add_argument('--hidden_dim', type=int, default=16)
     parser.add_argument('--relation_hidden_dim', type=int, default=16)
@@ -124,12 +125,17 @@ def train(model, G, labels, target, optimizer, scheduler, train_idx, clip=1.0, a
 def eval(model, G, labels, target, train_idx, val_idx, test_idx, alpha):
     model.eval()
 
+    start_time = time.time()
+
     # input_features = {(stype, etype, dtype): G.srcnodes[dtype].data['x'] for stype, etype, dtype in
     #                   G.canonical_etypes}
     # nodes_representation, _ = model[0](G, input_features)
     nodes_representation, raw = model[0](G)
 
     logits = model[1](nodes_representation[target])
+
+    end_time = time.time()
+    single_prediction_time = (end_time - start_time) * 1000
 
     torch.cat(list(nodes_representation.values()), dim=0)
     loss_reconstruction = F.mse_loss(nodes_representation[target][val_idx], raw[target][val_idx])
@@ -154,7 +160,8 @@ def eval(model, G, labels, target, train_idx, val_idx, test_idx, alpha):
         'val_mif1': val_micro_f1,
         'test_maf1': test_macro_f1,
         'test_mif1': test_micro_f1,
-        'loss': loss.item()
+        'loss': loss.item(),
+        'SPT': single_prediction_time
     }
 
 
@@ -341,7 +348,10 @@ def main(params):
     model_size = sum(p.numel() for p in model.parameters() if p.requires_grad) * 4 / 1024 ** 2  # in MB
     print(f'Model Size: {model_size:.2f} MB')
 
-    print(f'Training Time: {training_time:.2f} seconds')
+    time_per_epoch = training_time / params['epochs']
+    print(f"Time per epoch: {time_per_epoch:.2f} seconds")
+
+    print(f"Single Prediction Time: {best_results['SPT']:.2f} msec")
 
     return best_results, cluster_results
 
@@ -356,7 +366,7 @@ if __name__ == '__main__':
     macro_f1_scores = []
     nmi_scores = []
     ari_scores = []
-    num_runs = 10
+    num_runs = 1
 
     for i in range(num_runs):
         print(f"Run {i + 1}/{num_runs}")

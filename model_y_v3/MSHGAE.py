@@ -35,15 +35,8 @@ class MSHGEncoderLayer(nn.Module):
         self.relation_hidden_dim = relation_hidden_dim
         self.n_heads = n_heads
         self.dropout = dropout
-        self.negative_slope = negative_slope
         self.residual = residual
         self.norm = norm
-
-        # node transformation layers of each type
-        self.node_transformation_layers = nn.ModuleDict({
-            ntype: nn.Linear(input_dim, hidden_dim * n_heads)
-            for ntype in graph.ntypes
-        })
 
         # srcnode in relation transformation layers of each type
         self.relation_src_node_transformation_layers = nn.ModuleDict({
@@ -70,29 +63,6 @@ class MSHGEncoderLayer(nn.Module):
             for etype in graph.etypes
         })
 
-        if self.residual:
-            # residual connection
-            self.res_fc = nn.ModuleDict()
-            self.residual_weight = nn.ParameterDict()
-            for ntype in graph.ntypes:
-                self.res_fc[ntype] = nn.Linear(input_dim, n_heads * hidden_dim)
-                self.residual_weight[ntype] = nn.Parameter(torch.randn(1))
-
-        if self.norm:
-            self.layer_norm = nn.ModuleDict({ntype: nn.LayerNorm(n_heads * hidden_dim) for ntype in graph.ntypes})
-
-        # relation type crossing attention trainable parameters
-        self.relations_crossing_attention_weight = nn.ParameterDict({
-            etype: nn.Parameter(torch.randn(n_heads, hidden_dim))
-            for etype in graph.etypes
-        })
-        # different relations crossing layer
-        self.relations_crossing_layer = RelationCrossing(in_feats=n_heads * hidden_dim,
-                                                         out_feats=hidden_dim,
-                                                         num_heads=n_heads,
-                                                         dropout=dropout,
-                                                         negative_slope=negative_slope)
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -100,11 +70,6 @@ class MSHGEncoderLayer(nn.Module):
         gain = nn.init.calculate_gain('relu')
         for weight in self.relation_transformation_weight:
             nn.init.xavier_normal_(self.relation_transformation_weight[weight], gain=gain)
-        if self.residual:
-            for ntype in self.res_fc:
-                nn.init.xavier_normal_(self.res_fc[ntype].weight, gain=gain)
-        for weight in self.relations_crossing_attention_weight:
-            nn.init.xavier_normal_(self.relations_crossing_attention_weight[weight], gain=gain)
 
     def forward(self, graph: dgl.DGLHeteroGraph, h: dict, relation_embedding: dict):
         """
@@ -162,7 +127,6 @@ class MSHGEncoder(nn.Module):
         self.relation_hidden_dim = relation_hidden_dim
         self.n_heads = n_heads
         self.dropout = dropout
-        self.negative_slope = negative_slope
         self.residual = residual
         self.norm = norm
 
@@ -184,17 +148,12 @@ class MSHGEncoder(nn.Module):
             ntype: nn.Parameter(torch.randn(1)) for ntype in graph.ntypes
         })
 
-        self.scale_weight = nn.ParameterDict({
-            ntype: nn.Parameter(torch.randn(1)) for ntype in graph.ntypes
-        })
-
         # different relations fusing module
         self.relation_fusing = RelationFusing(node_hidden_dim=hidden_dim,
                                               relation_hidden_dim=relation_hidden_dim,
                                               num_heads=n_heads,
                                               dropout=dropout, negative_slope=negative_slope)
 
-        # self.GAT_Layer = GATConv(in_feats=input_dim, out_feats=hidden_dim, num_heads=n_heads)
         self.GConv_Layer = GraphConv(in_feats=input_dim, out_feats=hidden_dim * n_heads, bias=False)
 
         self.feature_fusion_layers = nn.ModuleDict({ntype: nn.Linear(hidden_dim * n_heads * 2, hidden_dim * n_heads) for ntype in graph.ntypes})
@@ -250,30 +209,16 @@ class MSHGEncoder(nn.Module):
             relation_target_node_features_dict = {etype: relation_target_node_features[(stype, etype, dtype)]
                                                   for stype, etype, dtype in relation_target_node_features}
 
-
-            raw_target_node_features_dict = {etype: dst_nodes_after_transformation[(stype, etype, dtype)]
-                                             for stype, etype, dtype in dst_nodes_after_transformation}
             etypes = [etype for stype, etype, dtype in relation_target_node_features if dtype == dsttype]
             # 得到每个终节点相关的基于关系的源节点聚合表示
 
             dst_node_features = [relation_target_node_features_dict[etype] for etype in etypes]
-            raw_dst_node_features = [raw_target_node_features_dict[etype] for etype in etypes]
-            dst_relation_embeddings = [relation_embedding[etype] for etype in etypes]
-            dst_relation_embedding_transformation_weight = [self.relation_transformation_weight[etype] for etype in etypes]
-            residual_weight = self.residual_weight[dsttype]
 
 
             # Tensor, shape (heads_num * hidden_dim)
-            dst_node_relation_fusion_feature = self.relation_fusing(dst_node_features,
-                                                                    raw_dst_node_features,
-                                                                    dst_relation_embeddings,
-                                                                    dst_relation_embedding_transformation_weight,
-                                                                    residual_weight)
-
+            dst_node_relation_fusion_feature = self.relation_fusing(dst_node_features)
 
             e_id = e_id + graph.num_nodes(dsttype)
-            alpha = F.sigmoid(self.scale_weight[dsttype])
-            # relation_fusion_embedding_dict[dsttype] = dst_node_relation_fusion_feature * alpha + node_level_features[s_id: e_id] * (1 - alpha)
             relation_fusion_embedding_dict[dsttype] = torch.cat([dst_node_relation_fusion_feature, node_level_features[s_id: e_id]], dim=-1)
             relation_fusion_embedding_dict[dsttype] = self.feature_fusion_layers[dsttype](relation_fusion_embedding_dict[dsttype])
 
@@ -307,7 +252,6 @@ class MSHGAE(nn.Module):
         self.relation_hidden_dim = relation_hidden_dim
         self.n_heads = n_heads
         self.dropout = dropout
-        self.negative_slope = negative_slope
         self.residual = residual
         self.norm = norm
 

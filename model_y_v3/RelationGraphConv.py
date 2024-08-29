@@ -106,7 +106,6 @@ class RelationAttentionConv(nn.Module):
         super(RelationAttentionConv, self).__init__()
         self._hidden_dim = hidden_dim
         self._num_heads = num_heads
-        self.relation_src_node_transformation_layer = nn.Linear(hidden_dim * num_heads, hidden_dim * num_heads)
 
         self.dropout = nn.Dropout(dropout)
         self.leaky_relu = nn.LeakyReLU(negative_slope)

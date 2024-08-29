@@ -15,7 +15,7 @@ from dgl.utils import expand_as_pair
 
 class DeCoderAttention(nn.Module):
 
-    def __init__(self, out_dim, num_heads, k_linear, q_linear, v_linear, w_att, w_msg, mu):
+    def __init__(self, out_dim, num_heads, k_linear, q_linear, v_linear, w_att, mu):
         """HGT注意力模块
 
         :param out_dim: int 输出特征维数
@@ -35,7 +35,6 @@ class DeCoderAttention(nn.Module):
         self.q_linear = q_linear
         self.v_linear = v_linear
         self.w_att = w_att
-        self.w_msg = w_msg
         self.mu = mu
 
     def forward(self, g, feat):
@@ -53,7 +52,6 @@ class DeCoderAttention(nn.Module):
 
             # k[:, h] @= w_att[h] => k[n, h, j] = ∑(i) k[n, h, i] * w_att[h, i, j]
             k = torch.einsum('nhi,hij->nhj', k, self.w_att)
-            # v = torch.einsum('nhi,hij->nhj', v, self.w_msg)
 
             g.srcdata.update({'k': k, 'v': v})
             g.dstdata['q'] = q
@@ -89,13 +87,12 @@ class MSHGDecoder(nn.Module):
         q_linear = {ntype: nn.Linear(in_dim, out_dim, bias=False) for ntype in ntypes}
         v_linear = {ntype: nn.Linear(in_dim, out_dim, bias=False) for ntype in ntypes}
         w_att = {r[1]: nn.Parameter(torch.Tensor(num_heads, d_k, d_k)) for r in etypes}
-        w_msg = {r[1]: nn.Parameter(torch.Tensor(num_heads, d_k, d_k)) for r in etypes}
         mu = {r[1]: nn.Parameter(torch.ones(num_heads)) for r in etypes}
-        self.reset_parameters(w_att, w_msg)
+        self.reset_parameters(w_att)
         self.conv = HeteroGraphConv({
             etype: DeCoderAttention(
                 out_dim, num_heads, k_linear[stype], q_linear[dtype], v_linear[stype],
-                w_att[etype], w_msg[etype], mu[etype]
+                w_att[etype], mu[etype]
             ) for stype, etype, dtype in etypes
         }, 'mean')
 
@@ -107,10 +104,9 @@ class MSHGDecoder(nn.Module):
         if use_norm:
             self.norms = nn.ModuleDict({ntype: nn.LayerNorm(out_dim) for ntype in ntypes})
 
-    def reset_parameters(self, w_att, w_msg):
+    def reset_parameters(self, w_att):
         for etype in w_att:
             nn.init.xavier_uniform_(w_att[etype])
-            nn.init.xavier_uniform_(w_msg[etype])
 
     def forward(self, g, feats):
         """

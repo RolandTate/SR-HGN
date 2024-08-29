@@ -23,11 +23,9 @@ class RelationFusing(nn.Module):
         self.num_heads = num_heads
 
         self.dropout = nn.Dropout(dropout)
-        self.leaky_relu = nn.LeakyReLU(negative_slope)
 
 
-    def forward(self, dst_node_features: list, raw_dst_node_features: list, dst_relation_embeddings: list,
-                dst_relation_embedding_transformation_weight: list, residual_weight: nn.parameter):
+    def forward(self, dst_node_features: list):
         """
         :param dst_node_features: list, [each shape is (num_dst_nodes, n_heads * node_hidden_dim)]
         :param dst_relation_embeddings: list, [each shape is (n_heads * relation_hidden_dim)]

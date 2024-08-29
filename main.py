@@ -28,7 +28,7 @@ def load_params():
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
-    parser.add_argument('--dataset', type=str, default='dblp')
+    parser.add_argument('--dataset', type=str, default='imdb')
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
@@ -42,7 +42,7 @@ def load_params():
     parser.add_argument('--hidden_dim', type=int, default=256)
     parser.add_argument('--num_node_heads', type=int, default=4)
     parser.add_argument('--num_type_heads', type=int, default=4)
-    parser.add_argument('--alpha', type=float, default=0.1)
+    parser.add_argument('--alpha', type=float, default=0.4)
 
     parser.add_argument('--cluster', action='store_false')
 
@@ -234,30 +234,30 @@ def main(params):
     # # plt.savefig('loss_plot.png')
     # plt.show()
 
-    fig, ax1 = plt.subplots()
-
-    ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Loss Values', color='tab:blue')
-    loss_line, = ax1.plot(range(params['epochs']), train_losses, color='tab:blue', label='Loss values')
-    ax1.tick_params(axis='y', labelcolor='tab:blue')
-
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    ax2.set_ylabel('Classification Micro-F1', color='tab:red')  # we already handled the x-label with ax1
-    ax2.set_ylim(0, 1.05)
-    micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='tab:green', label='Training Micro-F1')
-    macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='tab:red', label='Validating Macro-F1')
-    ax2.tick_params(axis='y', labelcolor='tab:red')
-
-    # fig.tight_layout(pad=3.0)  # otherwise the right y-label is slightly clipped
-    # plt.title('Training Loss and Metrics')
-
-    # Collect handles and labels from both axes
-    lines = [loss_line, micro_line, macro_line]
-    labels = [line.get_label() for line in lines]
-
-    # Create the legend manually
-    ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=3)
-    plt.show()
+    # fig, ax1 = plt.subplots()
+    #
+    # ax1.set_xlabel('Epochs')
+    # ax1.set_ylabel('Loss Values', color='tab:blue')
+    # loss_line, = ax1.plot(range(params['epochs']), train_losses, color='tab:blue', label='Loss values')
+    # ax1.tick_params(axis='y', labelcolor='tab:blue')
+    #
+    # ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    # ax2.set_ylabel('Classification Micro-F1', color='tab:red')  # we already handled the x-label with ax1
+    # ax2.set_ylim(0, 1.05)
+    # micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='tab:green', label='Training Micro-F1')
+    # macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='tab:red', label='Validating Macro-F1')
+    # ax2.tick_params(axis='y', labelcolor='tab:red')
+    #
+    # # fig.tight_layout(pad=3.0)  # otherwise the right y-label is slightly clipped
+    # # plt.title('Training Loss and Metrics')
+    #
+    # # Collect handles and labels from both axes
+    # lines = [loss_line, micro_line, macro_line]
+    # labels = [line.get_label() for line in lines]
+    #
+    # # Create the legend manually
+    # ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=3)
+    # plt.show()
 
     # Print model parameters
     model_params = get_n_params(model)
@@ -269,8 +269,49 @@ def main(params):
 
     print(f'Training Time: {training_time:.2f} seconds')
 
+    return best_results, cluster_results
+
 
 if __name__ == '__main__':
     params = load_params()
     set_random_seed(params['seed'])
-    main(params)
+
+    micro_f1_scores = []
+    macro_f1_scores = []
+    nmi_scores = []
+    ari_scores = []
+    num_runs = 10
+
+    for i in range(num_runs):
+        print(f"Run {i + 1}/{num_runs}")
+        results, cluster_results = main(params)
+        micro_f1_scores.append(results['test_mif1'])
+        macro_f1_scores.append(results['test_maf1'])
+        nmi_scores.append(cluster_results['nmi'])
+        ari_scores.append(cluster_results['ari'])
+
+    avg_micro_f1 = np.mean(micro_f1_scores)
+    std_micro_f1 = np.std(micro_f1_scores)
+    avg_macro_f1 = np.mean(macro_f1_scores)
+    std_macro_f1 = np.std(macro_f1_scores)
+    avg_nmi = np.mean(nmi_scores)
+    std_nmi = np.std(nmi_scores)
+    avg_ari = np.mean(ari_scores)
+    std_ari = np.std(ari_scores)
+
+    # 输出10次运行的详细值在一行
+    micro_f1_scores_str = ', '.join([f"{score * 100:.2f}" for score in micro_f1_scores])
+    print(f"Micro-F1 Scores for each run: [{micro_f1_scores_str}]")
+    print(f"Average Best Micro-F1 Score over {num_runs} runs: {avg_micro_f1 * 100:.2f} ({std_micro_f1 * 100:.2f})")
+
+    macro_f1_scores_str = ', '.join([f"{score * 100:.2f}" for score in macro_f1_scores])
+    print(f"Macro-F1 Scores for each run: [{macro_f1_scores_str}]")
+    print(f"Average Best Macro-F1 Score over {num_runs} runs: {avg_macro_f1 * 100:.2f} ({std_macro_f1 * 100:.2f})")
+
+    nmi_scores_str = ', '.join([f"{score * 100:.2f}" for score in nmi_scores])
+    print(f"NMI Scores for each run: [{nmi_scores_str}]")
+    print(f"Average NMI Score over {num_runs} runs: {avg_nmi * 100:.2f} ({std_nmi * 100:.2f})")
+
+    ari_scores_str = ', '.join([f"{score * 100:.2f}" for score in ari_scores])
+    print(f"ARI Scores for each run: [{ari_scores_str}]")
+    print(f"Average ARI Score over {num_runs} runs: {avg_ari * 100:.2f} ({std_ari * 100:.2f})")
