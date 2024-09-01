@@ -4,6 +4,7 @@ from pathlib import Path
 import argparse
 
 import numpy as np
+from matplotlib import rcParams
 from sklearn.metrics import f1_score, normalized_mutual_info_score, adjusted_rand_score
 from sklearn.cluster import KMeans
 
@@ -86,8 +87,14 @@ def train(model, G, labels, target, optimizer, scheduler, train_idx, clip=1.0):
 def eval(model, G, labels, target, train_idx, val_idx, test_idx):
     model.eval()
 
+    start_time = time.time()
+
     logits, _, _ = model(G, target)
     loss = F.cross_entropy(logits[val_idx], labels[val_idx])
+
+    end_time = time.time()
+    single_prediction_time = (end_time - start_time) * 1000
+
     pred = logits.argmax(1).detach().cpu().numpy()
 
     train_macro_f1 = f1_score(labels[train_idx].cpu(), pred[train_idx], average='macro')
@@ -104,7 +111,8 @@ def eval(model, G, labels, target, train_idx, val_idx, test_idx):
         'val_mif1': val_micro_f1,
         'test_maf1': test_macro_f1,
         'test_mif1': test_micro_f1,
-        'loss': loss.item()
+        'loss': loss.item(),
+        'SPT': single_prediction_time
     }
 
 
@@ -223,41 +231,43 @@ def main(params):
 
         logger.info('NMI: {:.4f} | ARI: {:.4f}'.format(cluster_results['nmi'], cluster_results['ari']))
 
-    # Plot training and validation loss
-    # plt.figure()
-    # plt.plot(train_losses, label='Training Loss')
-    # plt.plot(val_losses, label='Validation Loss')
-    # plt.xlabel('Epochs')
-    # plt.ylabel('Loss')
-    # plt.legend()
-    # plt.title(f'{my_str} Training and Validation Loss')
-    # # plt.savefig('loss_plot.png')
-    # plt.show()
+    fs = 28
+    ls = 24
+    rcParams['font.family'] = 'Times New Roman'
+    rcParams['font.size'] = fs
+    fig, ax1 = plt.subplots(figsize=(10, 8))
 
-    # fig, ax1 = plt.subplots()
-    #
-    # ax1.set_xlabel('Epochs')
-    # ax1.set_ylabel('Loss Values', color='tab:blue')
-    # loss_line, = ax1.plot(range(params['epochs']), train_losses, color='tab:blue', label='Loss values')
-    # ax1.tick_params(axis='y', labelcolor='tab:blue')
-    #
-    # ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    # ax2.set_ylabel('Classification Micro-F1', color='tab:red')  # we already handled the x-label with ax1
-    # ax2.set_ylim(0, 1.05)
-    # micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='tab:green', label='Training Micro-F1')
-    # macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='tab:red', label='Validating Macro-F1')
-    # ax2.tick_params(axis='y', labelcolor='tab:red')
-    #
-    # # fig.tight_layout(pad=3.0)  # otherwise the right y-label is slightly clipped
-    # # plt.title('Training Loss and Metrics')
-    #
-    # # Collect handles and labels from both axes
-    # lines = [loss_line, micro_line, macro_line]
-    # labels = [line.get_label() for line in lines]
-    #
-    # # Create the legend manually
-    # ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=3)
-    # plt.show()
+    ax1.set_xlabel('Epochs', fontsize=fs)
+    ax1.set_ylabel('Loss Values', fontsize=fs, labelpad=10)
+
+    # Set limits to start from 0 and align spines
+    ax1.set_xlim(0, params['epochs'])
+    ax1.set_ylim(0, max(train_losses) + 0.02 * max(train_losses))
+    ax1.spines['left'].set_position('zero')
+    ax1.spines['bottom'].set_position('zero')
+
+    train_loss_line, = ax1.plot(range(params['epochs']), train_losses, color='#1A2A3A', label='Loss')
+    ax1.tick_params(axis='y', labelsize=ls)
+    ax1.tick_params(axis='x', labelsize=ls)
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    ax2.set_ylabel('Classification Micro-F1', fontsize=fs, labelpad=10)  # we already handled the x-label with ax1
+    ax2.set_ylim(0, 1.02)
+    ax2.spines['right'].set_position(('outward', 0))
+    micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='#F25022', label='Training')
+    macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='#FFB900', label='Validation')
+    ax2.tick_params(axis='y', labelsize=ls)
+
+    lines = [train_loss_line, micro_line, macro_line]
+    labels = [line.get_label() for line in lines]
+
+    # Create the legend manually
+    plt.subplots_adjust(top=0.9)  # Leave space at the top for the legend
+
+    # Create the legend manually and position it in the remaining top space
+    plt.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.14), ncol=3, fontsize=ls + 1)
+
+    plt.show()
 
     # Print model parameters
     model_params = get_n_params(model)
@@ -267,7 +277,10 @@ def main(params):
     model_size = sum(p.numel() for p in model.parameters() if p.requires_grad) * 4 / 1024 ** 2  # in MB
     print(f'Model Size: {model_size:.2f} MB')
 
-    print(f'Training Time: {training_time:.2f} seconds')
+    time_per_epoch = training_time / params['epochs']
+    print(f"Time per epoch: {time_per_epoch:.2f} seconds")
+
+    print(f"Single Prediction Time: {best_results['SPT']:.2f} msec")
 
     return best_results, cluster_results
 

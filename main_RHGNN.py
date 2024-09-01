@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt  # for plotting loss
 import logging
 
 import numpy as np
-from matplotlib import rcParams
 from sklearn.metrics import f1_score, normalized_mutual_info_score, adjusted_rand_score
 from sklearn.cluster import KMeans
 
@@ -17,10 +16,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from model import SRHGN
-from model_y_v3.MSHGAE import MSHGAE
-from model_y_v3.R_HGT import CR_HGN
-from model_y import R_HGT
+from model_HGT.HGT import HGT
+from model_RHGNN.R_HGNN import R_HGNN
 from model_y_v3.Classifier import Classifier
 from utils import set_random_seed, load_data, get_n_params, set_logger
 from torchinfo import summary
@@ -30,16 +27,16 @@ logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 args = {
     'dataset': 'OGB_MAG',
-    'model_name': 'MSHGAE_lr0.001_dropout0.5_seed_0_patience20',
+    'model_name': 'R_HGT_lr0.001_dropout0.5_seed_0_patience20',
     'predict_category': 'paper',
     'seed': 0,
     'cuda': 0,
     'learning_rate': 0.001,
-    'num_heads': 4,
+    'num_heads': 8,
     'hidden_units': 64,
-    'relation_hidden_units': 4,
-    'dropout': 0.1,
-    'n_layers': 3,
+    'relation_hidden_units': 8,
+    'dropout': 0.5,
+    'n_layers': 2,
     'residual': True,
     'batch_size': 1280,  # the number of nodes to train in each batch
     'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
@@ -50,14 +47,14 @@ args = {
 }
 
 def load_params():
-    parser = argparse.ArgumentParser(description='Training SR-HGN')
-    parser.add_argument('--prefix', type=str, default='MSHGAE')
+    parser = argparse.ArgumentParser(description='Training R_HGNN')
+    parser.add_argument('--prefix', type=str, default='R_HGNN')
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--feat', type=int, default=1)
     parser.add_argument('--seed', type=int, default=0)
 
     parser.add_argument('--dataset', type=str, default='imdb')  # acm, dblp, imdb
-    parser.add_argument('--epochs', type=int, default=200)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--train_split', type=float, default=0.8)
     parser.add_argument('--val_split', type=float, default=0.1)
@@ -103,14 +100,11 @@ def train(model, G, labels, target, optimizer, scheduler, train_idx, clip=1.0, a
     # input_features = {(stype, etype, dtype): G.srcnodes[dtype].data['x'] for stype, etype, dtype in
     #                   G.canonical_etypes}
     # nodes_representation, _ = model[0](G, input_features)
-    nodes_representation, raw = model[0](G)
+    nodes_representation, _ = model[0](G)
 
     logits = model[1](nodes_representation[target])
 
-    # raw = {ntype: G.nodes[ntype].data['x'] for ntype in G.ntypes}
-    loss_reconstruction = F.mse_loss(nodes_representation[target][train_idx], raw[target][train_idx])
-    loss_classification = F.cross_entropy(logits[train_idx], labels[train_idx])
-    loss = alpha * loss_reconstruction + loss_classification
+    loss = F.cross_entropy(logits[train_idx], labels[train_idx])
 
     # loss = F.cross_entropy(logits[train_idx], labels[train_idx])
 
@@ -131,17 +125,14 @@ def eval(model, G, labels, target, train_idx, val_idx, test_idx, alpha):
     # input_features = {(stype, etype, dtype): G.srcnodes[dtype].data['x'] for stype, etype, dtype in
     #                   G.canonical_etypes}
     # nodes_representation, _ = model[0](G, input_features)
-    nodes_representation, raw = model[0](G)
+    nodes_representation, _ = model[0](G)
 
     logits = model[1](nodes_representation[target])
 
     end_time = time.time()
     single_prediction_time = (end_time - start_time) * 1000
 
-    torch.cat(list(nodes_representation.values()), dim=0)
-    loss_reconstruction = F.mse_loss(nodes_representation[target][val_idx], raw[target][val_idx])
-    loss_classification = F.cross_entropy(logits[val_idx], labels[val_idx])
-    loss = alpha * loss_reconstruction + loss_classification
+    loss = F.cross_entropy(logits[train_idx], labels[train_idx])
 
     # loss = F.cross_entropy(logits[val_idx], labels[val_idx])
 
@@ -172,7 +163,7 @@ def cluster(model, G, target, labels):
     # input_features = {(stype, etype, dtype): G.srcnodes[dtype].data['x'] for stype, etype, dtype in
     #                   G.canonical_etypes}
     # nodes_representation, _ = model[0](G, input_features)
-    nodes_representation, raw = model[0](G)
+    nodes_representation, _ = model[0](G)
     embedding = nodes_representation[target]
 
     embedding = embedding.detach().cpu().numpy()
@@ -206,40 +197,33 @@ def main(params):
     G = G.to(device)
     labels = labels.to(device)
 
-    # model = SRHGN(G,
-    #               node_dict, edge_dict,
-    #               input_dims=input_dims,
-    #               hidden_dim=params['hidden_dim'],
-    #               output_dim=labels.max().item() + 1,
-    #               num_layers=params['num_layers'],
-    #               num_node_heads=params['num_node_heads'],
-    #               num_type_heads=params['num_type_heads'],
-    #               alpha=params['alpha']).to(device)
+    # r_hgnn = R_HGNN(graph=G,
+    #                 input_dim_dict=input_dims,
+    #                 hidden_dim=args['hidden_units'], relation_input_dim=args['relation_hidden_units'],
+    #                 relation_hidden_dim=args['relation_hidden_units'],
+    #                 num_layers=args['n_layers'], n_heads=args['num_heads'], dropout=args['dropout'],
+    #                 residual=args['residual'])
+    #
+    # classifier = Classifier(n_hid=args['hidden_units'] * args['num_heads'], n_out=num_classes)
+    # model = nn.Sequential(r_hgnn, classifier).to(device)
 
-    # r_hgt = R_HGT(graph=G,
+    hgt = HGT(
+        in_dims=input_dims,
+        hidden_dim=64, out_dim=64, num_heads=8, ntypes=G.ntypes, etypes=G.canonical_etypes,
+        num_layers=2, dropout=0.1)
+    classifier = Classifier(n_hid=args['hidden_units'], n_out=num_classes)
+    model = nn.Sequential(hgt, classifier).to(device)
+
+    # mshgae = MSHGAE(graph=G,
     #               input_dim_dict=input_dims,
     #               hidden_dim=params['hidden_dim'], relation_input_dim=params['relation_hidden_dim'],
     #               relation_hidden_dim=params['relation_hidden_dim'],
     #               num_layers=params['num_layers'], n_heads=params['num_heads'], dropout=params['dropout'],
     #               residual=params['residual'])
-
-    # cr_hgn = CR_HGN(graph=G,
-    #               input_dim_dict=input_dims,
-    #               hidden_dim=params['hidden_dim'], relation_input_dim=params['relation_hidden_dim'],
-    #               relation_hidden_dim=params['relation_hidden_dim'],
-    #               num_layers=params['num_layers'], n_heads=params['num_heads'], dropout=params['dropout'],
-    #               residual=params['residual'])
-
-    mshgae = MSHGAE(graph=G,
-                  input_dim_dict=input_dims,
-                  hidden_dim=params['hidden_dim'], relation_input_dim=params['relation_hidden_dim'],
-                  relation_hidden_dim=params['relation_hidden_dim'],
-                  num_layers=params['num_layers'], n_heads=params['num_heads'], dropout=params['dropout'],
-                  residual=params['residual'])
-
-    classifier = Classifier(n_hid=params['hidden_dim'] * params['num_heads'], n_out=num_classes)
-
-    model = nn.Sequential(mshgae, classifier).to(device)
+    #
+    # classifier = Classifier(n_hid=params['hidden_dim'] * params['num_heads'], n_out=num_classes)
+    #
+    # model = nn.Sequential(mshgae, classifier).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=params['weight_decay'])
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=params['epochs'], max_lr=params['max_lr'])
@@ -315,43 +299,31 @@ def main(params):
 
         logger.info('NMI: {:.4f} | ARI: {:.4f}'.format(cluster_results['nmi'], cluster_results['ari']))
 
-    fs = 28
-    ls = 24
-    rcParams['font.family'] = 'Times New Roman'
-    rcParams['font.size'] = fs
-    fig, ax1 = plt.subplots(figsize=(10, 8))
-
-    ax1.set_xlabel('Epochs', fontsize=fs)
-    ax1.set_ylabel('Loss Values', fontsize=fs, labelpad=10)
-
-    # Set limits to start from 0 and align spines
-    ax1.set_xlim(0, params['epochs'])
-    ax1.set_ylim(0, max(train_losses) + 0.02 * max(train_losses))
-    ax1.spines['left'].set_position('zero')
-    ax1.spines['bottom'].set_position('zero')
-
-    train_loss_line, = ax1.plot(range(params['epochs']), train_losses, color='#1A2A3A', label='Loss')
-    ax1.tick_params(axis='y', labelsize=ls)
-    ax1.tick_params(axis='x', labelsize=ls)
-
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    ax2.set_ylabel('Classification Micro-F1', fontsize=fs, labelpad=10)  # we already handled the x-label with ax1
-    ax2.set_ylim(0, 1.02)
-    ax2.spines['right'].set_position(('outward', 0))
-    micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='#F25022', label='Training')
-    macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='#FFB900', label='Validation')
-    ax2.tick_params(axis='y', labelsize=ls)
-
-    lines = [train_loss_line, micro_line, macro_line]
-    labels = [line.get_label() for line in lines]
-
-    # Create the legend manually
-    plt.subplots_adjust(top=0.9)  # Leave space at the top for the legend
-
-    # Create the legend manually and position it in the remaining top space
-    plt.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.14), ncol=3, fontsize=ls + 1)
-
-    plt.show()
+    # fig, ax1 = plt.subplots()
+    #
+    # ax1.set_xlabel('Epochs')
+    # ax1.set_ylabel('Loss Values', color='tab:blue')
+    # train_loss_line, = ax1.plot(range(params['epochs']), train_losses, color='tab:blue', label='train_loss values')
+    # val_loss_line, = ax1.plot(range(params['epochs']), val_losses, color='tab:orange', label='val_loss values')
+    # ax1.tick_params(axis='y', labelcolor='tab:blue')
+    #
+    # ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    # ax2.set_ylabel('Classification Micro-F1', color='tab:red')  # we already handled the x-label with ax1
+    # ax2.set_ylim(0, 1.05)
+    # micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='tab:green', label='Training Micro-F1')
+    # macro_line, = ax2.plot(range(params['epochs']), val_micro_values, color='tab:red', label='Validating Macro-F1')
+    # ax2.tick_params(axis='y', labelcolor='tab:red')
+    #
+    # # fig.tight_layout(pad=3.0)  # otherwise the right y-label is slightly clipped
+    # # plt.title('Training Loss and Metrics')
+    #
+    # # Collect handles and labels from both axes
+    # lines = [train_loss_line, val_loss_line, micro_line, macro_line]
+    # labels = [line.get_label() for line in lines]
+    #
+    # # Create the legend manually
+    # ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=2)
+    # plt.show()
 
     # Print model parameters
     model_params = get_n_params(model)
