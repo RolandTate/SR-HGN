@@ -6,6 +6,7 @@ import argparse
 import copy
 import time  # for tracking training and prediction time
 import matplotlib.pyplot as plt  # for plotting loss
+from sklearn.manifold import TSNE
 import logging
 
 import numpy as np
@@ -50,7 +51,7 @@ args = {
 }
 
 def load_params():
-    parser = argparse.ArgumentParser(description='Training SR-HGN')
+    parser = argparse.ArgumentParser(description='Training MSHGAE')
     parser.add_argument('--prefix', type=str, default='MSHGAE')
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--feat', type=int, default=1)
@@ -69,10 +70,10 @@ def load_params():
     parser.add_argument('--input_dim', type=int, default=128)
     parser.add_argument('--hidden_dim', type=int, default=16)
     parser.add_argument('--relation_hidden_dim', type=int, default=16)
-    parser.add_argument('--num_heads', type=int, default=4)
+    parser.add_argument('--num_heads', type=int, default=2)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--residual', type=bool, default=True)
-    parser.add_argument('--alpha', type=float, default=0.1)
+    parser.add_argument('--alpha', type=float, default=0)
 
     parser.add_argument('--cluster', action='store_false')
 
@@ -188,6 +189,35 @@ def cluster(model, G, target, labels):
     }
 
 
+def visualize_tsne(model, G, target, labels, perplexity=30, n_iter=1000):
+    model.eval()
+    with torch.no_grad():
+        nodes_representation, _ = model[0](G)
+
+    # 获取目标节点的嵌入
+    embedding = nodes_representation[target]
+    # 转换为 NumPy 数组，方便后续处理
+    embedding_np = embedding.detach().cpu().numpy()
+    labels_np = labels.cpu().numpy()
+
+    # 使用 t-SNE 降维到二维
+    tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=n_iter, random_state=42)
+    embedding_2d = tsne.fit_transform(embedding_np)
+
+    # 绘制散点图，点的颜色根据标签显示
+    plt.figure(figsize=(8, 8))
+    scatter = plt.scatter(embedding_2d[:, 0], embedding_2d[:, 1],
+                          c=labels_np, cmap='viridis', s=10, alpha=0.7)
+    # 移除坐标轴、刻度和边框
+    plt.gca().set_xticks([])
+    plt.gca().set_yticks([])
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+    plt.gca().spines['bottom'].set_visible(False)
+    plt.gca().spines['left'].set_visible(False)
+
+    plt.show()
+
 def main(params):
     device = torch.device(f"cuda:{params['gpu']}" if torch.cuda.is_available() else 'cpu')
 
@@ -236,6 +266,8 @@ def main(params):
                   relation_hidden_dim=params['relation_hidden_dim'],
                   num_layers=params['num_layers'], n_heads=params['num_heads'], dropout=params['dropout'],
                   residual=params['residual'])
+    # from DeepSeek.GIHGAE import GHIGAE
+    # mshgae = GHIGAE(G, input_dims)
 
     classifier = Classifier(n_hid=params['hidden_dim'] * params['num_heads'], n_out=num_classes)
 
@@ -315,6 +347,9 @@ def main(params):
 
         logger.info('NMI: {:.4f} | ARI: {:.4f}'.format(cluster_results['nmi'], cluster_results['ari']))
 
+    # 假设你已经定义并训练好了模型 model，以及图 G 和标签 labels
+    visualize_tsne(model, G, target, labels)
+
     fs = 28
     ls = 24
     rcParams['font.family'] = 'Times New Roman'
@@ -335,7 +370,7 @@ def main(params):
     ax1.tick_params(axis='x', labelsize=ls)
 
     ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    ax2.set_ylabel('Classification Micro-F1', fontsize=fs, labelpad=10)  # we already handled the x-label with ax1
+    ax2.set_ylabel('Micro-F1', fontsize=fs, labelpad=10)  # we already handled the x-label with ax1
     ax2.set_ylim(0, 1.02)
     ax2.spines['right'].set_position(('outward', 0))
     micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='#F25022', label='Training')

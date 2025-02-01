@@ -180,19 +180,22 @@ class MSHGEncoder(nn.Module):
         :param relation_embedding: embedding for each relation, dict, {etype: feature} or None
         :return:
         """
-        h = {ntype: graph.nodes[ntype].data['x'] for ntype in graph.ntypes}
+        # h = {ntype: graph.nodes[ntype].data['x'] for ntype in graph.ntypes}
         if graph.is_block:
             feats_dst = {ntype: h[ntype][:graph.num_dst_nodes(ntype)] for ntype in h}
         else:
             feats_dst = h
 
-        for ntype in graph.ntypes:
-            graph.nodes[ntype].data.update({'x': self.node_transformation_layers[ntype](h[ntype])})
-
-        h = {ntype: graph.nodes[ntype].data['x'] for ntype in graph.ntypes}
+        # 对每种节点类型应用节点特征变换层
+        h = {
+            ntype: self.node_transformation_layers[ntype](h[ntype])
+            for ntype in graph.ntypes
+        }
 
         # node level convolution
         g = graph.local_var()
+        for ntype in g.ntypes:
+            g.nodes[ntype].data.update({'x': h[ntype]})
         g = dgl.to_homogeneous(g, ndata=['x'])
         node_level_features = F.relu(self.GConv_Layer(g, g.ndata['x']).view(-1, self.hidden_dim * self.n_heads))
 
@@ -234,7 +237,7 @@ class MSHGEncoder(nn.Module):
             # 用于节点级编码y
             graph.nodes[dsttype].data.update({'x': relation_fusion_embedding_dict[dsttype]})
 
-        # relation_fusion_embedding_dict, {ntype: tensor -> (nodes, n_heads * hidden_dim)}
+        # relation_fusion_embedding_dict, {ntype: tensor -> (nodes, n_heads * hidden_ dim)}
         # relation_target_node_features, {(srctype, etype, dsttype): (dst_nodes, n_heads * hidden_dim)}
         return relation_fusion_embedding_dict, relation_embedding
 

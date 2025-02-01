@@ -30,7 +30,7 @@ ax1.tick_params(axis='y', labelsize=ls)
 ax1.tick_params(axis='x', labelsize=ls)
 
 ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-ax2.set_ylabel('Classification Micro-F1', fontsize=fs, labelpad=10)  # we already handled the x-label with ax1
+ax2.set_ylabel('Micro-F1', fontsize=fs, labelpad=10)  # we already handled the x-label with ax1
 ax2.set_ylim(0, 1.02)
 ax2.spines['right'].set_position(('outward', 0))
 micro_line, = ax2.plot(range(params['epochs']), train_micro_values, color='#F25022', label='Training')
