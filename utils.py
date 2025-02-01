@@ -111,6 +111,29 @@ def load_acm_raw(train_split=0.2, val_split=0.3, feat=1):
 
         paper_feats = torch.FloatTensor(p_vs_t.toarray())
         features = {}
+
+    # 假设已有加载好的原始异构图 hg
+    # hg = load_acm_raw(feat=1)[0]  # 比如取第一个返回值，原始的异构图
+
+    # 构造基于元路径的图：PAP 和 PSP
+    g_pap = dgl.metapath_reachable_graph(hg, ['paper_author', 'author_paper'])
+    g_psp = dgl.metapath_reachable_graph(hg, ['paper_subject', 'subject_paper'])
+
+    # 查看生成的元路径图信息
+    print("PAP graph:", g_pap)
+    print("PSP graph:", g_psp)
+
+    # 如果你想将它们组合成一个带有两种边类型的异构图，
+    # 可以从 g_pap 和 g_psp 提取边列表，然后构造一个新的异构图：
+    pap_edges = (g_pap.edges()[0], g_pap.edges()[1])
+    psp_edges = (g_psp.edges()[0], g_psp.edges()[1])
+
+    hg_meta = dgl.heterograph({
+        ('paper', 'PAP', 'paper'): pap_edges,
+        ('paper', 'PSP', 'paper'): psp_edges,
+    })
+    print("HG meta:", hg_meta)
+
     print(hg)
 
     pc_p, pc_c = p_vs_c.nonzero()
@@ -203,6 +226,28 @@ def load_dblp_precessed(train_split=0.2, val_split=0.3, feat=1):
     hg = dgl.heterograph(hg_data)
     print(hg)
 
+    # 元路径构建
+    # 生成元路径图：A->P->A (Author–Paper–Author)
+    g_apa = dgl.metapath_reachable_graph(hg, ['author_paper', 'paper_author'])
+    # 生成元路径图：A->P->T->P->A (Author–Paper–Term–Paper–Author)
+    g_aptpa = dgl.metapath_reachable_graph(hg, ['author_paper', 'paper_term', 'term_paper', 'paper_author'])
+    # 生成元路径图：A->P->C->P->A (Author–Paper–Conference–Paper–Author)
+    g_apcpa = dgl.metapath_reachable_graph(hg, ['author_paper', 'paper_conference', 'conference_paper', 'paper_author'])
+
+    # 打印元路径图的基本信息
+    print("A->P->A graph:", g_apa)
+    print("A->P->T->P->A graph:", g_aptpa)
+    print("A->P->C->P->A graph:", g_apcpa)
+
+    # 可以选择将它们作为新的异构图的边类型，或者将它们作为图的子图返回
+    hg_meta = dgl.heterograph({
+        ('author', 'APA', 'author'): g_apa.edges(),
+        ('author', 'APTPA', 'author'): g_aptpa.edges(),
+        ('author', 'APCPA', 'author'): g_apcpa.edges(),
+    })
+
+    print("Meta-path based heterograph:", hg_meta)
+
     split = np.load(osp.join(raw_dir, f'train_val_test_idx_{int(train_split * 100)}_2021.npz'))
     train_idx = split['train_idx']
     val_idx = split['val_idx']
@@ -277,6 +322,24 @@ def load_imdb_precessed(train_split=0.2, val_split=0.3, feat=1):
 
     hg = dgl.heterograph(hg_data)
     print(hg)
+
+    # 元路径构建：MDM (Movie-Director-Movie)
+    g_mdm = dgl.metapath_reachable_graph(hg, ['movie_director', 'director_movie'])
+
+    # 元路径构建：MAM (Movie-Actor-Movie)
+    g_mam = dgl.metapath_reachable_graph(hg, ['movie_actor', 'actor_movie'])
+
+    # 打印元路径图的信息
+    print("MDM graph (Movie-Director-Movie):", g_mdm)
+    print("MAM graph (Movie-Actor-Movie):", g_mam)
+
+    # 如果需要，可以将这两个元路径图作为新的异构图的边类型
+    hg_meta = dgl.heterograph({
+        ('movie', 'MDM', 'movie'): g_mdm.edges(),
+        ('movie', 'MAM', 'movie'): g_mam.edges(),
+    })
+
+    print("Meta-path based heterograph:", hg_meta)
 
     split = np.load(osp.join(raw_dir, f'train_val_test_idx_{int(train_split * 100)}_2021.npz'))
     train_idx = split['train_idx']
